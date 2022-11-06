@@ -52,6 +52,7 @@ http://127.0.0.1:56825/api/produce
 
 5. Scaling down to below original replicas of 3
 - Keda Consumer Config: `minReplicaCount:  1`
+
     ![image.png](images/scaled-below-original.png)
 
 
