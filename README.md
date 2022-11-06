@@ -59,6 +59,7 @@ http://127.0.0.1:56825/api/produce
 ## Issues to think about
 - Message stuck due to error
 - Partition Key specified for topic. Large consumer lag observed on one/few particular partitions.
+- Metric watched is the max consumer lab for single partition
 
 
 ## Others
