@@ -39,18 +39,20 @@ http://127.0.0.1:56825/api/produce
 
 2. Confluent Cloud Consumer Lag
 - Keda Consumer Lag Setting: `lagThreshold: "50"`
-![image.png](images/confluent-cloud-consumer-lag.png)
+    ![image.png](images/confluent-cloud-consumer-lag.png)
 
 3. Scaling up
-![image.png](images/kube-events.png)
-![image.png](images/scaling-up.png)
+
+    ![image.png](images/kube-events.png)
+    ![image.png](images/scaling-up.png)
 
 4. Scaling down
-![image.png](images/scaling-down.png)
+
+    ![image.png](images/scaling-down.png)
 
 5. Scaling down to below original replicas of 3
 - Keda Consumer Config: `minReplicaCount:  1`
-![image.png](images/scaled-below-original.png)
+    ![image.png](images/scaled-below-original.png)
 
 
 ## Issues to think about
