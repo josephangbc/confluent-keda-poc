@@ -6,7 +6,7 @@ metadata:
     app: dep
   name: dep
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: dep
@@ -20,5 +20,11 @@ spec:
       containers:
       - image: josephangbc/keda-poc
         name: keda-poc
-        resources: {}
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 500m
+            memory: 512Mi
 status: {}

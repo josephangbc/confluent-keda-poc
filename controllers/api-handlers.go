@@ -3,6 +3,7 @@ package controllers
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -83,6 +84,92 @@ func ProduceMessage(c *gin.Context) {
 	}
 }
 
+func ProduceMessageTo(c *gin.Context) {
+	go func() {
+		for e := range _producer.Events() {
+			switch ev := e.(type) {
+			case *kafka.Message:
+				if ev.TopicPartition.Error != nil {
+					fmt.Printf("Failed to deliver message: %v\n", ev.TopicPartition)
+				} else {
+					fmt.Printf("Successfully produced record to topic %s partition [%d] @ offset %v\n",
+						*ev.TopicPartition.Topic, ev.TopicPartition.Partition, ev.TopicPartition.Offset)
+				}
+			}
+		}
+	}()
+	
+	var messageTarget target
+
+	err := c.BindJSON(&messageTarget)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{})
+		return
+	}
+
+	for n := 0; n < int(messageTarget.Num); n++ {
+		data := &RecordValue{
+			Count: n}
+		recordValue, _ := json.Marshal(&data)
+		fmt.Printf("Preparing to produce record: %s\n", recordValue)
+		_producer.Produce(&kafka.Message{
+			TopicPartition: kafka.TopicPartition{Topic: &messageTarget.Topic, Partition: kafka.PartitionAny},
+			Value:          []byte(recordValue),
+		}, nil)
+	}
+
+	// Wait for all messages to be delivered
+	var unflushed = _producer.Flush(15 * 1000)
+	if unflushed > 0 {
+		fmt.Printf("%d messages were NOT produced to topic %s!", unflushed, messageTarget.Topic)
+	} else {
+		fmt.Printf("%d messages were produced to topic %s!",messageTarget.Num , messageTarget.Topic)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"Topic": messageTarget.Topic, "Num": messageTarget.Num})
+	return
+
+
+}
+
+type target struct {
+    Topic	string `json:"topic"`
+    Num		int32  `json:"num"`
+}
+
+func GenerateHighCPU(c *gin.Context) {
+
+	var taskTarget taskTarget
+
+	err := c.BindJSON(&taskTarget)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{})
+		return
+	}
+
+	for i:=0; i < taskTarget.NTasks; i++ {
+		go oneTask(taskTarget.Iteration)
+	}
+	
+	c.JSON(http.StatusOK, gin.H{})
+}
+
+func oneTask(n int) {
+	s := 2.0
+	for i:= 0; i < n; i++ {
+		s = math.Pow(s, 2)
+		fmt.Println(s)
+	}
+	return
+}
+
+type taskTarget struct {
+	NTasks		int  `json:"nTasks"`
+    Iteration	int  `json:"iteration"`
+}
+
+
+
 
 func SetupKafkaConsumer() {
 	c, err := kafka.NewConsumer(&kafka.ConfigMap{
@@ -103,7 +190,7 @@ func SetupKafkaConsumer() {
 
 	// Subscribe to topic
 	
-	subscribeTo := [1]string{"topic_0"}
+	subscribeTo := [4]string{"topic_0", "topic_1", "topic_2", "topic_3"}
 
 	err = c.SubscribeTopics(subscribeTo[:], nil)
 	// Set up a channel for handling Ctrl-C, etc
@@ -118,6 +205,7 @@ func SetupKafkaConsumer() {
 		case sig := <-sigchan:
 			fmt.Printf("Caught signal %v: terminating\n", sig)
 			run = false
+			os.Exit(0)
 		default:
 			msg, err := c.ReadMessage(100 * time.Millisecond)
 			time.Sleep(10000 * time.Millisecond)
@@ -135,7 +223,7 @@ func SetupKafkaConsumer() {
 			}
 			count := data.Count
 			totalCount += count
-			fmt.Printf("Consumed record from topic %s partition %s at offset %s", msg.TopicPartition.Topic, msg.TopicPartition.Partition, msg.TopicPartition.Offset)
+			fmt.Printf("Consumed record from topic %s partition %d at offset %s\n", *msg.TopicPartition.Topic, msg.TopicPartition.Partition, msg.TopicPartition.Offset)
 		}
 	}
 

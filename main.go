@@ -21,6 +21,9 @@ func main() {
 
 	api.GET("/", controllers.MessagePongHandler)
 	api.GET("/produce", controllers.ProduceMessage)
+	api.POST("/produceto", controllers.ProduceMessageTo)
+	api.POST("/generatehighcpu", controllers.GenerateHighCPU)
+
 
 	// Start and run the server
 	router.Run(":5000")
