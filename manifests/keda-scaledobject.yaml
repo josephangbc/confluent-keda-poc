@@ -49,11 +49,17 @@ spec:
     horizontalPodAutoscalerConfig:                   # Optional. Section to specify HPA related options
       behavior:                                      # Optional. Use to modify HPA's scaling behavior
         scaleUp:
-          stabilizationWindowSeconds: 30
+          stabilizationWindowSeconds: 15
           policies:
           - type: Pods
             value: 1
-            periodSeconds: 30
+            periodSeconds: 15
+        scaleDown:
+          stabilizationWindowSeconds: 15
+          policies:
+          - type: Percent
+            value: 100
+            periodSeconds: 15
   triggers:
   - type: kafka
     metadata:
@@ -83,15 +89,15 @@ spec:
       offsetResetPolicy: latest
     authenticationRef:
       name: keda-trigger-auth-kafka-credential
-  - type: cpu
-    metricType: AverageValue # Allowed types are 'Utilization' or 'AverageValue'
-    metadata:
-      value: "20"
-  #     containerName: "keda-poc"
-  - type: cron
-    metadata:
-      # Required
-      timezone: Asia/Singapore  # The acceptable values would be a value from the IANA Time Zone Database.
-      start: 28 * * * *       # Every hour on the 30th minute
-      end: 45 * * * *         # Every hour on the 45th minute
-      desiredReplicas: "3"
+  # - type: cpu
+  #   metricType: AverageValue # Allowed types are 'Utilization' or 'AverageValue'
+  #   metadata:
+  #     value: "20"
+  # #     containerName: "keda-poc"
+  # - type: cron
+  #   metadata:
+  #     # Required
+  #     timezone: Asia/Singapore  # The acceptable values would be a value from the IANA Time Zone Database.
+  #     start: 28 * * * *       # Every hour on the 30th minute
+  #     end: 45 * * * *         # Every hour on the 45th minute
+  #     desiredReplicas: "3"

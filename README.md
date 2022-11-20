@@ -94,6 +94,25 @@ http://127.0.0.1:56825/api/produce
 
     ![image.png](images/cpu-scaling-during-cron.png)
 
+### Custom KEDA Codes to exclude Partitions stuck due to error
+#### Custom KEDA Codes
+Github Link: https://github.com/JosephABC/keda
+
+Changes are in `kafka_scaler.go` in  [`getLagForPartition`](https://github.com/JosephABC/keda/blob/35354abbc86e9f68f55dfd68d70fd176c5a36300/pkg/scalers/kafka_scaler.go#L408) function
+
+#### Demo
+1. Consumer Lag remain the same due to being stuck
+
+    ![image.png](images/stuck-consumer-lag.png)
+
+2. Custom KEDA code excludes Consumer Lag for these partitions, hence 0 consumer lag shown in HPA
+
+    ![image.png](images/stuck-consumer-hpa.png)
+
+KEDA does not trigger scaling of consumer deployment based on these stuck partitions
+
+
+
 
 ## Issues to think about
 ### Kafka-scaler
@@ -111,6 +130,12 @@ To Observe and kill process on local
 netstat -anop | grep -i 5000
 pkill <PID>
 kill -9 <PID>
+```
+
+## To Deploy KEDA to Cluster
+```
+IMAGE_REGISTRY=docker.io IMAGE_REPO=josephangbc make publish
+IMAGE_REGISTRY=docker.io IMAGE_REPO=josephangbc make deploy
 ```
 
 

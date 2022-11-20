@@ -14,7 +14,7 @@ func main() {
 
 	// Kafka Setup
 	go controllers.SetupKafkaProducer()
-	go controllers.SetupKafkaConsumer()
+	go controllers.SetupKafkaConsumerParallel()
 
 	// Setup route group for the API
 	api := router.Group("/api")

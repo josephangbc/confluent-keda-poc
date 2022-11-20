@@ -11,14 +11,16 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
+	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
 
 // Package Level Variables
 var _producer *kafka.Producer
+var _consumer *kafka.Consumer
 
 type RecordValue struct {
 	Count int
+	Stuck bool
 }
 
 // Functions
@@ -70,7 +72,7 @@ func ProduceMessage(c *gin.Context) {
 		recordValue, _ := json.Marshal(&data)
 		fmt.Printf("Preparing to produce record: %s\n", recordValue)
 		_producer.Produce(&kafka.Message{
-			TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
+			TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: int32(n % 5)},
 			Value:          []byte(recordValue),
 		}, nil)
 	}
@@ -110,10 +112,11 @@ func ProduceMessageTo(c *gin.Context) {
 	for n := 0; n < int(messageTarget.Num); n++ {
 		data := &RecordValue{
 			Count: n}
+		data.Stuck = checkIfExist(n, messageTarget.Stuck)
 		recordValue, _ := json.Marshal(&data)
 		fmt.Printf("Preparing to produce record: %s\n", recordValue)
 		_producer.Produce(&kafka.Message{
-			TopicPartition: kafka.TopicPartition{Topic: &messageTarget.Topic, Partition: kafka.PartitionAny},
+			TopicPartition: kafka.TopicPartition{Topic: &messageTarget.Topic, Partition: int32(n % 5)},
 			Value:          []byte(recordValue),
 		}, nil)
 	}
@@ -128,13 +131,21 @@ func ProduceMessageTo(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"Topic": messageTarget.Topic, "Num": messageTarget.Num})
 	return
-
-
 }
 
 type target struct {
     Topic	string `json:"topic"`
     Num		int32  `json:"num"`
+	Stuck	[]int  `json:"stuck"`
+}
+
+func checkIfExist(n int, arr []int) bool {
+	for i:= range arr {
+		if i == n {
+			return true
+		}
+	}
+	return false
 }
 
 func GenerateHighCPU(c *gin.Context) {
@@ -208,7 +219,7 @@ func SetupKafkaConsumer() {
 			os.Exit(0)
 		default:
 			msg, err := c.ReadMessage(100 * time.Millisecond)
-			time.Sleep(10000 * time.Millisecond)
+			time.Sleep(2000 * time.Millisecond)
 			if err != nil {
 				// Errors are informational and automatically handled by the consumer
 				continue
@@ -221,6 +232,9 @@ func SetupKafkaConsumer() {
 				fmt.Printf("Failed to decode JSON at offset %d: %v", msg.TopicPartition.Offset, err)
 				continue
 			}
+			if data.Stuck {
+				time.Sleep(12000 * time.Millisecond)
+			}
 			count := data.Count
 			totalCount += count
 			fmt.Printf("Consumed record from topic %s partition %d at offset %s\n", *msg.TopicPartition.Topic, msg.TopicPartition.Partition, msg.TopicPartition.Offset)
@@ -229,3 +243,90 @@ func SetupKafkaConsumer() {
 
 }
 
+func SetupKafkaConsumerParallel() {
+	_consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
+		"bootstrap.servers": "pkc-1dkx6.ap-southeast-1.aws.confluent.cloud:9092",
+		"security.protocol": "SASL_SSL",
+		"sasl.mechanisms": "PLAIN",
+		"sasl.username": "NQGAHCSBBVIBTRDV",
+		"sasl.password": "1gACJscJKWdN+OR1rdZLd78uQEEL0fLjQl/GV6iUTCoNsTyN4QglmNeS9buj6USG",
+		"group.id":          "consumer_group_1",
+		"auto.offset.reset": "earliest",
+		"ssl.ca.location": "/etc/ssl/certs",
+		"enable.ssl.certificate.verification": "false",
+		"go.events.channel.size": 1,
+		"go.events.channel.enable": false,
+		// "enable.auto.offset.store": "false",
+	})
+	if err != nil {
+		fmt.Printf("Failed to create consumer: %s", err)
+		os.Exit(1)
+	}
+
+	// Subscribe to topic
+	
+	subscribeTo := [4]string{"topic_0", "topic_1", "topic_2", "topic_3"}
+
+	err = _consumer.SubscribeTopics(subscribeTo[:], nil)
+	// Set up a channel for handling Ctrl-C, etc
+	sigchan := make(chan os.Signal, 1)
+	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Process messages
+	// totalCount := 0
+	run := true
+	for run == true {
+		select {
+		case sig := <-sigchan:
+			fmt.Printf("Caught signal %v: terminating\n", sig)
+			run = false
+			os.Exit(0)
+		default:
+			event := _consumer.Poll(100)
+			switch e := event.(type) {
+			case *kafka.Message:
+				fmt.Printf("Initiate at %s: %d at offset %d \n", *e.TopicPartition.Topic, int(e.TopicPartition.Partition), int(e.TopicPartition.Offset))
+				fmt.Printf("Pause at %s: %d at offset %d \n", *e.TopicPartition.Topic, int(e.TopicPartition.Partition), int(e.TopicPartition.Offset))
+				_consumer.Pause([]kafka.TopicPartition{e.TopicPartition})
+				
+				go func() {
+					fmt.Printf("Process at %s: %d at offset %d \n", *e.TopicPartition.Topic, int(e.TopicPartition.Partition), int(e.TopicPartition.Offset))
+					
+					// base sleep time
+					time.Sleep(2000 * time.Millisecond)
+
+					// Read Message details
+					recordValue := e.Value
+					data := RecordValue{}
+					err := json.Unmarshal(recordValue, &data)
+					fmt.Printf("Trying to consume %s: %d at offset %d \n", *e.TopicPartition.Topic, int(e.TopicPartition.Partition), int(e.TopicPartition.Offset))
+					if err != nil {
+						fmt.Printf("Failed to decode JSON at offset %d: %v", e.TopicPartition.Offset, err)
+					}
+
+					// Check if message is supposed to be stuck
+					if data.Stuck {
+						for i := 30; i > 0; i-- {
+							fmt.Printf("Message at TopicPartition: %s:%d, offset: %d is stuck for another %d sec\n", *e.TopicPartition.Topic,int(e.TopicPartition.Partition), int(e.TopicPartition.Offset), i*10)
+							time.Sleep(10000 * time.Millisecond)
+						}
+					}
+
+					fmt.Printf("Committing at %s: %d at offset %d \n", *e.TopicPartition.Topic, int(e.TopicPartition.Partition), int(e.TopicPartition.Offset))
+					_consumer.Commit()
+					
+					fmt.Printf("Resume at %s: %d at offset %d \n", *e.TopicPartition.Topic, int(e.TopicPartition.Partition), int(e.TopicPartition.Offset))
+					_consumer.Resume([]kafka.TopicPartition{e.TopicPartition})
+				}()
+
+			case kafka.PartitionEOF:
+				// fmt.Printf("%% Reached %v\n", e)
+			case kafka.Error:
+				// fmt.Fprintf(os.Stderr, "%% Error: %v\n", e)
+				// run = false
+			default:
+				// fmt.Printf("Ignored %v\n", e)
+			}
+		}
+	}
+}
