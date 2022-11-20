@@ -116,13 +116,12 @@ KEDA does not trigger scaling of consumer deployment based on these stuck partit
 
 ## Issues to think about
 ### Kafka-scaler
-- Message stuck due to error
-- Partition Key specified for topic. Large consumer lag observed on one/few particular partitions.
-- Metric watched is the max consumer lab for single partition
+- Message in a partition encounters error and is unable to be consumed and offset cannot be committed.
+- Partition Key specified for topic. Large consumer lag observed on one/few particular partitions. Scaling out will probably have less effect on performance
+- Metric watched is the total consumer lag for Topic or all topics subcribed by the consumer group
 
 ### CPU-Scaler
 - `containerName` parameter requires Kubernetes cluster version `1.20 or higher` with `HPAContainerMetrics` feature enabled.
-
 
 ## Others
 To Observe and kill process on local
